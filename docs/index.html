@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muziek Kloon</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee;
+         display: grid; place-items: center; min-height: 100vh; margin: 0; text-align: center; }
+  a { color: #7cf; font-size: 1.2em; }
+  .klein { color: #888; font-size: .9em; max-width: 30em; }
+</style>
+</head>
+<body>
+<div>
+  <h1>🎵 Muziek Kloon</h1>
+  <p id="status">Verbinden met de app...</p>
+  <p><a href="{{URL}}">Open de app</a></p>
+  <p class="klein">Werkt alleen als de app op de pc aanstaat (start.bat).</p>
+</div>
+<script>
+  const url = "{{URL}}";
+  fetch(url, { mode: "no-cors" })
+    .then(() => { location.href = url; })
+    .catch(() => {
+      document.getElementById("status").textContent =
+        "De app staat nu uit. Start start.bat op de pc en ververs deze pagina na een minuut.";
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+demucs==4.0.1
+transformers>=4.44
+gradio>=5
+librosa
+soundfile
