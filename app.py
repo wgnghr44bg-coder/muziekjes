@@ -159,43 +159,6 @@ def namaken(bestand, beschrijving, start, duur, creativiteit, versies, ontruisen
 
 
 # -------------------------------------------------------------------- UI ---
-with gr.Blocks(title="Muziek Kloon") as app:
-    gr.Markdown("# 🎵 Muziek Kloon\nHaal de achtergrondmuziek uit een nummer en maak er "
-                f"een nieuwe versie van in dezelfde stijl. *(draait op: {DEVICE})*")
-
-    with gr.Tab("1. Achtergrond eruit halen"):
-        inp = gr.Audio(label="Nummer (mp3, wav, ...)", type="filepath")
-        knop1 = gr.Button("Zang eruit halen", variant="primary")
-        achter = gr.Audio(label="Achtergrond (zonder zang)")
-        with gr.Accordion("Losse sporen", open=False):
-            drums = gr.Audio(label="Drums")
-            bas = gr.Audio(label="Bas")
-            overig = gr.Audio(label="Overige instrumenten")
-            zang = gr.Audio(label="Zang")
-
-    with gr.Tab("2. Nieuwe achtergrond maken"):
-        gr.Markdown("Gebruikt het voorbeeld voor melodie en stijl. Na stap 1 staat de "
-                    "achtergrond hier automatisch klaar; je kunt ook zelf iets uploaden.")
-        voorbeeld = gr.Audio(label="Voorbeeld", type="filepath")
-        beschrijving = gr.Textbox(
-            label="Beschrijving (Engels werkt het best)",
-            placeholder="bijv. chill lo-fi hip hop beat with piano and soft drums")
-        with gr.Row():
-            start = gr.Number(label="Start in voorbeeld (sec)", value=0, minimum=0)
-            duur = gr.Slider(5, 30, value=15, step=1, label="Lengte (sec)")
-        with gr.Row():
-            creativiteit = gr.Slider(0.5, 1.5, value=1.0, step=0.05,
-                                     label="Creativiteit (laag = dichter bij origineel)")
-            versies = gr.Slider(1, 3, value=1, step=1, label="Aantal versies")
-        ontruis2 = gr.Slider(0, 1, value=0.4, step=0.05,
-                             label="Ruis en tikken verwijderen (0 = uit, 1 = sterk)")
-        knop2 = gr.Button("Nieuwe achtergrond maken", variant="primary")
-        uit = [gr.Audio(label=f"Versie {i}") for i in (1, 2, 3)]
-
-    knop1.click(scheid, inp, [achter, drums, bas, overig, zang, voorbeeld])
-    knop2.click(namaken, [voorbeeld, beschrijving, start, duur, creativiteit, versies,
-                          ontruis2], uit)
-
 def wachtwoord() -> str:
     """Lokaal wachtwoord (staat NIET op GitHub)."""
     bestand = Path(__file__).parent / "wachtwoord.txt"
@@ -203,6 +166,76 @@ def wachtwoord() -> str:
         import secrets
         bestand.write_text(secrets.token_urlsafe(9), encoding="utf-8")
     return bestand.read_text(encoding="utf-8").strip()
+
+
+WACHTWOORD = wachtwoord()
+
+
+def inloggen(invoer):
+    import hmac
+    ok = hmac.compare_digest((invoer or "").strip().encode(), WACHTWOORD.encode())
+    return (ok, gr.update(visible=not ok), gr.update(visible=ok),
+            "" if ok else "❌ Verkeerd wachtwoord, probeer opnieuw.")
+
+
+def alleen_ingelogd(functie):
+    """Login zit in de sessie op de server (geen cookies nodig, werkt op elke telefoon)."""
+    def wrapper(ok, *args, progress=gr.Progress()):
+        if not ok:
+            raise gr.Error("Log eerst in.")
+        return functie(*args, progress=progress)
+    return wrapper
+
+
+with gr.Blocks(title="Muziek Kloon") as app:
+    gr.Markdown("# 🎵 Muziek Kloon")
+    ingelogd = gr.State(False)
+
+    with gr.Column(visible=True) as login_scherm:
+        ww_invoer = gr.Textbox(label="Wachtwoord", type="password")
+        login_knop = gr.Button("Inloggen", variant="primary")
+        login_melding = gr.Markdown()
+
+    with gr.Column(visible=False) as hoofd_scherm:
+        gr.Markdown("Haal de achtergrondmuziek uit een nummer en maak er een nieuwe versie "
+                    f"van in dezelfde stijl. *(draait op: {DEVICE})*")
+
+        with gr.Tab("1. Achtergrond eruit halen"):
+            inp = gr.Audio(label="Nummer (mp3, wav, ...)", type="filepath")
+            knop1 = gr.Button("Zang eruit halen", variant="primary")
+            achter = gr.Audio(label="Achtergrond (zonder zang)")
+            with gr.Accordion("Losse sporen", open=False):
+                drums = gr.Audio(label="Drums")
+                bas = gr.Audio(label="Bas")
+                overig = gr.Audio(label="Overige instrumenten")
+                zang = gr.Audio(label="Zang")
+
+        with gr.Tab("2. Nieuwe achtergrond maken"):
+            gr.Markdown("Gebruikt het voorbeeld voor melodie en stijl. Na stap 1 staat de "
+                        "achtergrond hier automatisch klaar; je kunt ook zelf iets uploaden.")
+            voorbeeld = gr.Audio(label="Voorbeeld", type="filepath")
+            beschrijving = gr.Textbox(
+                label="Beschrijving (Engels werkt het best)",
+                placeholder="bijv. chill lo-fi hip hop beat with piano and soft drums")
+            with gr.Row():
+                start = gr.Number(label="Start in voorbeeld (sec)", value=0, minimum=0)
+                duur = gr.Slider(5, 30, value=15, step=1, label="Lengte (sec)")
+            with gr.Row():
+                creativiteit = gr.Slider(0.5, 1.5, value=1.0, step=0.05,
+                                         label="Creativiteit (laag = dichter bij origineel)")
+                versies = gr.Slider(1, 3, value=1, step=1, label="Aantal versies")
+            ontruis2 = gr.Slider(0, 1, value=0.4, step=0.05,
+                                 label="Ruis en tikken verwijderen (0 = uit, 1 = sterk)")
+            knop2 = gr.Button("Nieuwe achtergrond maken", variant="primary")
+            uit = [gr.Audio(label=f"Versie {i}") for i in (1, 2, 3)]
+
+    login_uit = [ingelogd, login_scherm, hoofd_scherm, login_melding]
+    login_knop.click(inloggen, ww_invoer, login_uit)
+    ww_invoer.submit(inloggen, ww_invoer, login_uit)
+    knop1.click(alleen_ingelogd(scheid), [ingelogd, inp],
+                [achter, drums, bas, overig, zang, voorbeeld])
+    knop2.click(alleen_ingelogd(namaken), [ingelogd, voorbeeld, beschrijving, start, duur,
+                                           creativiteit, versies, ontruis2], uit)
 
 
 def publiceer_link(url: str):
@@ -219,10 +252,9 @@ def publiceer_link(url: str):
 
 
 if __name__ == "__main__":
-    ww = wachtwoord()
-    print(f"\n  Inloggen: gebruiker 'muziek', wachtwoord '{ww}'\n")
+    print(f"\n  Wachtwoord voor de app: {WACHTWOORD}\n")
     _, lokaal, openbaar = app.queue().launch(
-        share=True, auth=("muziek", ww), inbrowser=True, prevent_thread_lock=True)
+        share=True, inbrowser=True, prevent_thread_lock=True, max_file_size="200mb")
     if openbaar:
         print(f"  Openbare link: {openbaar}")
         publiceer_link(openbaar)
