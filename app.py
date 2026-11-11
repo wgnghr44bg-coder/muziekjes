@@ -69,18 +69,49 @@ def get_demucs():
     return _demucs
 
 
+def naar_wav(pad: str) -> str:
+    """Haal het geluid uit elk audio- of videobestand (mp4, mov, m4a, ...) met ffmpeg."""
+    import subprocess
+    tmp = OUT_DIR / "tmp"
+    tmp.mkdir(exist_ok=True)
+    doel = tmp / (Path(pad).stem[:40] + ".wav")
+    r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", pad, "-vn",
+                        "-ac", "2", "-ar", "44100", str(doel)], capture_output=True, text=True)
+    if r.returncode != 0 or not doel.exists():
+        raise gr.Error("Kon geen geluid uit dit bestand halen. Is het een audio- of videobestand?")
+    return str(doel)
+
+
+def naar_mp3(pad, progress=gr.Progress()):
+    """Video (of ander audiobestand) omzetten naar mp3 (192 kbps)."""
+    import subprocess
+    if not pad:
+        raise gr.Error("Upload eerst een video.")
+    progress(0.2, desc="Omzetten naar mp3...")
+    doel = _stamp(Path(pad).stem[:40]).with_suffix(".mp3")
+    r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", pad, "-vn",
+                        "-c:a", "libmp3lame", "-b:a", "192k", str(doel)],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or not doel.exists():
+        raise gr.Error("Kon geen geluid uit dit bestand halen. Is het een video- of audiobestand?")
+    return str(doel), str(doel)
+
+
 def scheid(bestand, progress=gr.Progress()):
     """Eerste (beste) versie: htdemucs, ongewijzigd opgeslagen."""
     if not bestand:
-        raise gr.Error("Upload eerst een nummer.")
+        raise gr.Error("Upload eerst een nummer of video.")
     from demucs.apply import apply_model
 
+    progress(0.02, desc="Geluid uit bestand halen...")
+    bestand = naar_wav(bestand)
     progress(0.05, desc="Model laden...")
     model = get_demucs()
     sr = model.samplerate
 
     progress(0.15, desc="Audio inlezen...")
     wav, _ = librosa.load(bestand, sr=sr, mono=False)
+    Path(bestand).unlink(missing_ok=True)
     if wav.ndim == 1:
         wav = np.stack([wav, wav])
     wav = torch.from_numpy(wav[:2]).float()
@@ -201,7 +232,9 @@ with gr.Blocks(title="Muziek Kloon") as app:
                     f"van in dezelfde stijl. *(draait op: {DEVICE})*")
 
         with gr.Tab("1. Achtergrond eruit halen"):
-            inp = gr.Audio(label="Nummer (mp3, wav, ...)", type="filepath")
+            inp = gr.File(label="Nummer of video (mp3, wav, m4a, mp4, mov, ...)",
+                          file_types=["audio", "video", ".mp4", ".mov", ".m4a", ".m4v"],
+                          type="filepath")
             knop1 = gr.Button("Zang eruit halen", variant="primary")
             achter = gr.Audio(label="Achtergrond (zonder zang)")
             with gr.Accordion("Losse sporen", open=False):
@@ -229,6 +262,16 @@ with gr.Blocks(title="Muziek Kloon") as app:
             knop2 = gr.Button("Nieuwe achtergrond maken", variant="primary")
             uit = [gr.Audio(label=f"Versie {i}") for i in (1, 2, 3)]
 
+        with gr.Tab("MP4 → MP3"):
+            gr.Markdown("Zet een video om naar een mp3-bestand.")
+            video = gr.File(label="Video (mp4, mov, ...)",
+                            file_types=["video", "audio", ".mp4", ".mov", ".m4v", ".m4a"],
+                            type="filepath")
+            knop3 = gr.Button("Omzetten naar MP3", variant="primary")
+            mp3_speler = gr.Audio(label="MP3")
+            mp3_download = gr.File(label="Download MP3")
+
+    knop3.click(alleen_ingelogd(naar_mp3), [ingelogd, video], [mp3_speler, mp3_download])
     login_uit = [ingelogd, login_scherm, hoofd_scherm, login_melding]
     login_knop.click(inloggen, ww_invoer, login_uit)
     ww_invoer.submit(inloggen, ww_invoer, login_uit)
