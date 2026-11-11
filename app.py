@@ -70,35 +70,69 @@ def get_demucs():
     return _demucs
 
 
+_roformer = None
+ROFORMER_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+
+
+def get_roformer():
+    global _roformer
+    if _roformer is None:
+        from audio_separator.separator import Separator
+        _roformer = Separator(output_dir=str(OUT_DIR / "tmp"), output_format="WAV",
+                              model_file_dir=str(Path.home() / ".cache" / "audio-separator"))
+        _roformer.load_model(ROFORMER_MODEL)
+    return _roformer
+
+
+def stem_weghalen(bestand: str) -> str:
+    """BS-RoFormer: haalt alle stemgeluid (zang en praten) weg. Geeft pad naar instrumentaal."""
+    sep = get_roformer()
+    uit = sep.separate(bestand)
+    tmp = OUT_DIR / "tmp"
+    instr = next(f for f in uit if "instrumental" in f.lower())
+    for f in uit:
+        if f != instr:
+            (tmp / Path(f).name).unlink(missing_ok=True)
+    return str(tmp / Path(instr).name)
+
+
 def scheid(bestand, ontruisen=0.6, progress=gr.Progress()):
     if not bestand:
         raise gr.Error("Upload eerst een nummer.")
     from demucs.apply import apply_model
 
-    progress(0.05, desc="Model laden...")
+    progress(0.05, desc="Stem weghalen (BS-RoFormer)...")
+    origineel = bestand
+    instr_pad = stem_weghalen(bestand)
+
+    progress(0.45, desc="Instrumenten in losse sporen splitsen...")
     model = get_demucs()
     sr = model.samplerate
 
-    progress(0.15, desc="Audio inlezen...")
-    wav, _ = librosa.load(bestand, sr=sr, mono=False)
-    if wav.ndim == 1:
-        wav = np.stack([wav, wav])
-    wav = torch.from_numpy(wav[:2]).float()
+    def laad(pad):
+        x, _ = librosa.load(pad, sr=sr, mono=False)
+        return np.stack([x, x]) if x.ndim == 1 else x[:2]
+
+    orig, instr = laad(origineel), laad(instr_pad)
+    Path(instr_pad).unlink(missing_ok=True)
+    n = min(orig.shape[1], instr.shape[1])
+    orig, instr = orig[:, :n], instr[:, :n]
+
+    wav = torch.from_numpy(instr).float()
     ref = wav.mean(0)
     wav = (wav - ref.mean()) / (ref.std() + 1e-8)
-
-    progress(0.3, desc="Zang en instrumenten scheiden (kan even duren)...")
     with torch.no_grad():
-        # shifts=2: twee keer scheiden met kleine verschuiving en middelen -> minder artefacten
+        # tweede ronde: Demucs splitst de instrumentale versie en vangt stemresten nog eens op
         sources = apply_model(model, wav[None], device=DEVICE, split=True, shifts=2,
                               overlap=0.25, progress=False)[0]
     sources = sources * ref.std() + ref.mean()
     stems = {name: sources[i].cpu().numpy() for i, name in enumerate(model.sources)}
+    instrumentaal = sum(v for k, v in stems.items() if k != "vocals")
+    stems["vocals"] = orig - instrumentaal  # alle stem uit het origineel
 
     progress(0.85, desc="Ruis en tikken verwijderen...")
-    stem = Path(bestand).stem[:40]
+    stem = Path(origineel).stem[:40]
     paden = {}
-    instrumentaal = sum(v for k, v in stems.items() if k != "vocals")
     for name, data in [("achtergrond", instrumentaal), *stems.items()]:
         schoon = afwerken(data, sr, ontruisen=float(ontruisen) if name != "vocals" else 0.0,
                           normaliseren=(name == "achtergrond"))
