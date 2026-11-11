@@ -4,5 +4,4 @@ gradio>=5
 librosa
 soundfile
 noisereduce
-audio-separator[gpu]
 audioread
