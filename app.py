@@ -25,16 +25,52 @@ def _stamp(name: str) -> Path:
     return OUT_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}_{name}.wav"
 
 
+# --------------------------------------------------------- nabewerking ---
+def afwerken(x: np.ndarray, sr: int, ontruisen: float = 0.0, normaliseren: bool = True):
+    """Maak audio schoon: DC weg, ruis/tikken eruit, volume op peil, zachte randen.
+
+    x: (kanalen, samples) of (samples,). ontruisen: 0 (uit) .. 1 (sterk).
+    """
+    x = np.atleast_2d(np.asarray(x, dtype=np.float32))
+    x = x - x.mean(axis=1, keepdims=True)
+
+    if ontruisen > 0:
+        import noisereduce as nr
+        x = nr.reduce_noise(y=x, sr=sr, stationary=False, prop_decrease=float(ontruisen),
+                            time_mask_smooth_ms=64, freq_mask_smooth_hz=500,
+                            n_fft=2048).astype(np.float32)
+
+    piek = float(np.abs(x).max()) + 1e-9
+    if normaliseren:
+        rms = float(np.sqrt((x ** 2).mean())) + 1e-9
+        gain = min(10 ** (-16 / 20) / rms, 0.89 / piek)  # ~-16 dB RMS, max -1 dBFS piek
+    else:
+        gain = min(1.0, 0.89 / piek)  # alleen oversturing voorkomen
+    x *= gain
+
+    fade = min(int(0.02 * sr), x.shape[1] // 4)
+    if fade > 0:
+        ramp = np.linspace(0, 1, fade, dtype=np.float32)
+        x[:, :fade] *= ramp
+        x[:, -fade:] *= ramp[::-1]
+    return x
+
+
+def opslaan(pad: Path, x: np.ndarray, sr: int):
+    sf.write(pad, x.T if x.shape[0] <= 2 else x, sr, subtype="PCM_24")
+
+
 # ---------------------------------------------------------------- stap 1 ---
 def get_demucs():
     global _demucs
     if _demucs is None:
         from demucs.pretrained import get_model
-        _demucs = get_model("htdemucs").to(DEVICE).eval()
+        # fine-tuned versie: schonere scheiding, minder zangresten
+        _demucs = get_model("htdemucs_ft").to(DEVICE).eval()
     return _demucs
 
 
-def scheid(bestand, progress=gr.Progress()):
+def scheid(bestand, ontruisen=0.6, progress=gr.Progress()):
     if not bestand:
         raise gr.Error("Upload eerst een nummer.")
     from demucs.apply import apply_model
@@ -53,18 +89,21 @@ def scheid(bestand, progress=gr.Progress()):
 
     progress(0.3, desc="Zang en instrumenten scheiden (kan even duren)...")
     with torch.no_grad():
-        sources = apply_model(model, wav[None], device=DEVICE, split=True,
+        # shifts=2: twee keer scheiden met kleine verschuiving en middelen -> minder artefacten
+        sources = apply_model(model, wav[None], device=DEVICE, split=True, shifts=2,
                               overlap=0.25, progress=False)[0]
     sources = sources * ref.std() + ref.mean()
     stems = {name: sources[i].cpu().numpy() for i, name in enumerate(model.sources)}
 
-    progress(0.9, desc="Opslaan...")
-    stem = Path(bestand).stem
+    progress(0.85, desc="Ruis en tikken verwijderen...")
+    stem = Path(bestand).stem[:40]
     paden = {}
     instrumentaal = sum(v for k, v in stems.items() if k != "vocals")
     for name, data in [("achtergrond", instrumentaal), *stems.items()]:
+        schoon = afwerken(data, sr, ontruisen=float(ontruisen) if name != "vocals" else 0.0,
+                          normaliseren=(name == "achtergrond"))
         p = _stamp(f"{stem}_{name}")
-        sf.write(p, data.T, sr)
+        opslaan(p, schoon, sr)
         paden[name] = str(p)
 
     return (paden["achtergrond"], paden["drums"], paden["bass"],
@@ -81,11 +120,13 @@ def get_musicgen():
         processor = AutoProcessor.from_pretrained(repo)
         model = MusicgenMelodyForConditionalGeneration.from_pretrained(
             repo, torch_dtype=dtype).to(DEVICE).eval()
+        # geluid decoderen in volle precisie: fp16 hier geeft ruis en tikjes
+        model.audio_encoder.float()
         _musicgen = (processor, model)
     return _musicgen
 
 
-def namaken(bestand, beschrijving, start, duur, creativiteit, versies,
+def namaken(bestand, beschrijving, start, duur, creativiteit, versies, ontruisen=0.4,
             progress=gr.Progress()):
     if not bestand:
         raise gr.Error("Kies een voorbeeld (bijv. de achtergrond uit stap 1).")
@@ -114,7 +155,7 @@ def namaken(bestand, beschrijving, start, duur, creativiteit, versies,
     resultaten = []
     for i in range(int(versies)):
         p = _stamp(f"kloon_{i + 1}")
-        sf.write(p, out[i, 0].float().cpu().numpy(), out_sr)
+        opslaan(p, afwerken(out[i, 0].float().cpu().numpy(), out_sr, float(ontruisen)), out_sr)
         resultaten.append(str(p))
     resultaten += [None] * (3 - len(resultaten))
     return resultaten
@@ -127,6 +168,8 @@ with gr.Blocks(title="Muziek Kloon") as app:
 
     with gr.Tab("1. Achtergrond eruit halen"):
         inp = gr.Audio(label="Nummer (mp3, wav, ...)", type="filepath")
+        ontruis1 = gr.Slider(0, 1, value=0.6, step=0.05,
+                             label="Ruis en tikken verwijderen (0 = uit, 1 = sterk)")
         knop1 = gr.Button("Zang eruit halen", variant="primary")
         achter = gr.Audio(label="Achtergrond (zonder zang)")
         with gr.Accordion("Losse sporen", open=False):
@@ -149,11 +192,14 @@ with gr.Blocks(title="Muziek Kloon") as app:
             creativiteit = gr.Slider(0.5, 1.5, value=1.0, step=0.05,
                                      label="Creativiteit (laag = dichter bij origineel)")
             versies = gr.Slider(1, 3, value=1, step=1, label="Aantal versies")
+        ontruis2 = gr.Slider(0, 1, value=0.4, step=0.05,
+                             label="Ruis en tikken verwijderen (0 = uit, 1 = sterk)")
         knop2 = gr.Button("Nieuwe achtergrond maken", variant="primary")
         uit = [gr.Audio(label=f"Versie {i}") for i in (1, 2, 3)]
 
-    knop1.click(scheid, inp, [achter, drums, bas, overig, zang, voorbeeld])
-    knop2.click(namaken, [voorbeeld, beschrijving, start, duur, creativiteit, versies], uit)
+    knop1.click(scheid, [inp, ontruis1], [achter, drums, bas, overig, zang, voorbeeld])
+    knop2.click(namaken, [voorbeeld, beschrijving, start, duur, creativiteit, versies,
+                          ontruis2], uit)
 
 def wachtwoord() -> str:
     """Lokaal wachtwoord (staat NIET op GitHub)."""

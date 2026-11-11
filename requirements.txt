@@ -3,3 +3,4 @@ transformers>=4.44
 gradio>=5
 librosa
 soundfile
+noisereduce
