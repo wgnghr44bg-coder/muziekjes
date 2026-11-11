@@ -1,4 +1,4 @@
-# 🎵 Muziek Kloon
+# 🎵 Muziekjes
 
 Lokale web-app (Gradio) om achtergrondmuziek uit een nummer of video te halen en na te maken.
 Draait op een eigen pc met NVIDIA-videokaart en is via een openbare link ook op de telefoon te gebruiken.

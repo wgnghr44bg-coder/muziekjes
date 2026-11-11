@@ -1,4 +1,4 @@
-# Muziek Kloon – afspraken voor Claude
+# Muziekjes – afspraken voor Claude
 
 Zie README.md voor wat de app doet en hoe hij werkt. De gebruiker spreekt Nederlands.
 

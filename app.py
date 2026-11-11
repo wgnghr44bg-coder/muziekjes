@@ -1,4 +1,4 @@
-"""Muziek Kloon - achtergrondmuziek eruit halen en namaken.
+"""Muziekjes - achtergrondmuziek eruit halen en namaken.
 
 Stap 1: Demucs haalt de zang weg -> instrumentale achtergrond + losse sporen.
 Stap 2: MusicGen-Melody maakt nieuwe muziek die de melodie/stijl van de achtergrond volgt.
@@ -218,8 +218,8 @@ def alleen_ingelogd(functie):
     return wrapper
 
 
-with gr.Blocks(title="Muziek Kloon") as app:
-    gr.Markdown("# 🎵 Muziek Kloon")
+with gr.Blocks(title="Muziekjes") as app:
+    gr.Markdown("# 🎵 Muziekjes")
     ingelogd = gr.State(False)
 
     with gr.Column(visible=True) as login_scherm:
