@@ -35,5 +35,5 @@ het vaste adres door naar de app. De link werkt alleen zolang de app op de pc dr
 ## Aanpassen
 
 - Login zit in de app zelf (`inloggen` / `alleen_ingelogd` in `app.py`), zonder cookies, zodat het ook op iPhone werkt.
-- Gebruik voor stap 1 `htdemucs`: bij tests klonk dit het beste (`htdemucs_ft` en BS-RoFormer lieten bij
-  schermopnames meer stem horen of klonken minder goed).
+- Stap 1 gebruikt bewust `htdemucs` zonder nabewerking: dat klonk bij het luisteren het beste.
+  `htdemucs_ft` liet meer stem over; BS-RoFormer + ruisfilter haalde meer stem weg maar klonk minder goed.
