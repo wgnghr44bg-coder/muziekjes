@@ -94,7 +94,7 @@ def naar_mp3(pad, progress=gr.Progress()):
                        capture_output=True, text=True)
     if r.returncode != 0 or not doel.exists():
         raise gr.Error("Kon geen geluid uit dit bestand halen. Is het een video- of audiobestand?")
-    return str(doel), str(doel)
+    return str(doel), gr.update(value=str(doel), visible=True)
 
 
 def pc_opnemen(seconden, progress=gr.Progress()):
@@ -234,11 +234,41 @@ def wachtwoord() -> str:
 WACHTWOORD = wachtwoord()
 
 
-def inloggen(invoer):
+def _sleutel() -> str:
+    """Afgeleide sleutel om ingelogd te blijven (het wachtwoord zelf wordt nergens bewaard)."""
+    import hashlib
+    return hashlib.sha256(("muziekjes:" + WACHTWOORD).encode()).hexdigest()
+
+
+SLEUTEL = _sleutel()
+
+
+def _klopt(waarde: str, verwacht: str) -> bool:
     import hmac
-    ok = hmac.compare_digest((invoer or "").strip().encode(), WACHTWOORD.encode())
-    return (ok, gr.update(visible=not ok), gr.update(visible=ok),
-            "" if ok else "❌ Verkeerd wachtwoord, probeer opnieuw.")
+    return hmac.compare_digest((waarde or "").strip().encode(), verwacht.encode())
+
+
+def _scherm(ok, melding=""):
+    return ok, gr.update(visible=not ok), gr.update(visible=ok), melding
+
+
+def inloggen(invoer):
+    ok = _klopt(invoer, WACHTWOORD)
+    return (*_scherm(ok, "" if ok else "❌ Verkeerd wachtwoord, probeer opnieuw."),
+            SLEUTEL if ok else "")
+
+
+def automatisch_inloggen(onthouden, request: gr.Request):
+    """Bij openen/verversen: sleutel uit de browser of uit de link (?t=...) van de site."""
+    if onthouden == "uitgelogd":  # bewust uitgelogd: niet automatisch weer inloggen
+        return (*_scherm(False), onthouden)
+    via_link = request.query_params.get("t", "") if request else ""
+    ok = _klopt(via_link, SLEUTEL) or _klopt(onthouden, SLEUTEL)
+    return (*_scherm(ok), SLEUTEL if ok else onthouden)
+
+
+def uitloggen():
+    return (*_scherm(False, "Je bent uitgelogd."), "uitgelogd")
 
 
 def alleen_ingelogd(functie):
@@ -250,9 +280,25 @@ def alleen_ingelogd(functie):
     return wrapper
 
 
+def _download_knoppen(*paden):
+    """Zet downloadknoppen aan zodra er een resultaat is."""
+    uit = [gr.update(value=p, visible=bool(p)) for p in paden]
+    return uit[0] if len(uit) == 1 else uit
+
+
+def _sporen_downloads(achtergrond, *sporen):
+    return (_download_knoppen(achtergrond),
+            gr.update(value=[s for s in sporen if s] or None, visible=any(sporen)))
+
+
+def _dl(label):
+    return gr.DownloadButton(f"⬇️ Download {label}", visible=False, variant="secondary")
+
+
 with gr.Blocks(title="Muziekjes") as app:
     gr.Markdown("# 🎵 Muziekjes")
     ingelogd = gr.State(False)
+    onthouden = gr.BrowserState("", storage_key="muziekjes_sleutel")
 
     with gr.Column(visible=True) as login_scherm:
         ww_invoer = gr.Textbox(label="Wachtwoord", type="password")
@@ -268,12 +314,15 @@ with gr.Blocks(title="Muziekjes") as app:
                           file_types=["audio", "video", ".mp4", ".mov", ".m4a", ".m4v"],
                           type="filepath")
             knop1 = gr.Button("Zang eruit halen", variant="primary")
-            achter = gr.Audio(label="Achtergrond (zonder zang)")
+            achter = gr.Audio(label="Achtergrond (zonder zang)", type="filepath")
+            dl_achter = _dl("achtergrond")
             with gr.Accordion("Losse sporen", open=False):
-                drums = gr.Audio(label="Drums")
-                bas = gr.Audio(label="Bas")
-                overig = gr.Audio(label="Overige instrumenten")
-                zang = gr.Audio(label="Zang")
+                drums = gr.Audio(label="Drums", type="filepath")
+                bas = gr.Audio(label="Bas", type="filepath")
+                overig = gr.Audio(label="Overige instrumenten", type="filepath")
+                zang = gr.Audio(label="Zang", type="filepath")
+                dl_sporen = gr.File(label="Download losse sporen", file_count="multiple",
+                                    visible=False)
 
         with gr.Tab("2. Nieuwe achtergrond maken"):
             gr.Markdown("Gebruikt het voorbeeld voor melodie en stijl. Na stap 1 staat de "
@@ -292,17 +341,24 @@ with gr.Blocks(title="Muziekjes") as app:
             ontruis2 = gr.Slider(0, 1, value=0.4, step=0.05,
                                  label="Ruis en tikken verwijderen (0 = uit, 1 = sterk)")
             knop2 = gr.Button("Nieuwe achtergrond maken", variant="primary")
-            uit = [gr.Audio(label=f"Versie {i}") for i in (1, 2, 3)]
+            uit, dl_uit = [], []
+            for i in (1, 2, 3):
+                uit.append(gr.Audio(label=f"Versie {i}", type="filepath"))
+                dl_uit.append(_dl(f"versie {i}"))
 
         with gr.Tab("Opnemen"):
             gr.Markdown("### 💻 Geluid van de pc\nNeemt op wat de pc nu afspeelt "
-                        "(YouTube, Spotify, ...). Zet eerst het geluid aan op de pc, druk dan op opnemen.")
+                        "(YouTube, Spotify, ...). Zet eerst het geluid aan op de pc, druk dan "
+                        "op opnemen. Loopt door, ook als je telefoon op slot gaat.")
             seconden = gr.Slider(5, 300, value=30, step=5, label="Hoe lang opnemen (sec)")
             knop_pc = gr.Button("⏺ Pc-geluid opnemen", variant="primary")
-            pc_opname = gr.Audio(label="Pc-opname")
+            pc_opname = gr.Audio(label="Pc-opname", type="filepath")
+            dl_pc = _dl("pc-opname")
             gr.Markdown("### 📱 Microfoon (telefoon)\nNeemt op via de microfoon, bijvoorbeeld "
-                        "muziek uit je speaker. Tip: met de schermopname van je iPhone krijg je "
-                        "betere kwaliteit; die mp4 kun je in stap 1 uploaden.")
+                        "muziek uit je speaker. Let op: laat de app open staan, op de "
+                        "achtergrond of met je scherm op slot stopt de iPhone de opname. "
+                        "Tip: de schermopname van je iPhone werkt wél op de achtergrond; die "
+                        "mp4 kun je in stap 1 uploaden.")
             mic_opname = gr.Audio(label="Microfoon-opname", sources=["microphone"], type="filepath")
             knop_mic = gr.Button("Gebruik deze opname in stap 1")
             gr.Markdown("*Na het opnemen staat de opname automatisch klaar in stap 1.*")
@@ -313,19 +369,29 @@ with gr.Blocks(title="Muziekjes") as app:
                             file_types=["video", "audio", ".mp4", ".mov", ".m4v", ".m4a"],
                             type="filepath")
             knop3 = gr.Button("Omzetten naar MP3", variant="primary")
-            mp3_speler = gr.Audio(label="MP3")
-            mp3_download = gr.File(label="Download MP3")
+            mp3_speler = gr.Audio(label="MP3", type="filepath")
+            dl_mp3 = _dl("MP3")
 
-    knop3.click(alleen_ingelogd(naar_mp3), [ingelogd, video], [mp3_speler, mp3_download])
-    knop_pc.click(alleen_ingelogd(pc_opnemen), [ingelogd, seconden], [pc_opname, inp])
-    knop_mic.click(alleen_ingelogd(mic_gebruiken), [ingelogd, mic_opname], inp)
-    login_uit = [ingelogd, login_scherm, hoofd_scherm, login_melding]
+        uitlog_knop = gr.Button("Uitloggen", size="sm", variant="secondary")
+
+    # inloggen / ingelogd blijven
+    login_uit = [ingelogd, login_scherm, hoofd_scherm, login_melding, onthouden]
     login_knop.click(inloggen, ww_invoer, login_uit)
     ww_invoer.submit(inloggen, ww_invoer, login_uit)
+    app.load(automatisch_inloggen, onthouden, login_uit)
+    uitlog_knop.click(uitloggen, None, login_uit)
+
+    # acties + downloadknoppen
     knop1.click(alleen_ingelogd(scheid), [ingelogd, inp],
-                [achter, drums, bas, overig, zang, voorbeeld])
+                [achter, drums, bas, overig, zang, voorbeeld]).then(
+        _sporen_downloads, [achter, drums, bas, overig, zang], [dl_achter, dl_sporen])
     knop2.click(alleen_ingelogd(namaken), [ingelogd, voorbeeld, beschrijving, start, duur,
-                                           creativiteit, versies, ontruis2], uit)
+                                           creativiteit, versies, ontruis2], uit).then(
+        _download_knoppen, uit, dl_uit)
+    knop_pc.click(alleen_ingelogd(pc_opnemen), [ingelogd, seconden], [pc_opname, inp]).then(
+        _download_knoppen, pc_opname, dl_pc)
+    knop_mic.click(alleen_ingelogd(mic_gebruiken), [ingelogd, mic_opname], inp)
+    knop3.click(alleen_ingelogd(naar_mp3), [ingelogd, video], [mp3_speler, dl_mp3])
 
 
 def publiceer_link(url: str):
