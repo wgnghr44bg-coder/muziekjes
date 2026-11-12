@@ -7,25 +7,67 @@
 <style>
   body { font-family: system-ui, sans-serif; background: #111; color: #eee;
          display: grid; place-items: center; min-height: 100vh; margin: 0; text-align: center; }
-  a { color: #7cf; font-size: 1.2em; }
+  a, button { color: #7cf; font-size: 1.1em; }
+  input, button { font-size: 1.1em; padding: .5em .8em; border-radius: .5em; border: 1px solid #555; }
+  input { background: #222; color: #eee; }
+  button { background: #e8590c; color: #fff; border: 0; }
   .klein { color: #888; font-size: .9em; max-width: 30em; }
+  .vergeet { background: none; color: #888; font-size: .85em; text-decoration: underline; }
 </style>
 </head>
 <body>
 <div>
   <h1>🎵 Muziekjes</h1>
   <p id="status">Verbinden met de app...</p>
-  <p><a href="https://ca77343a1156674aa0.gradio.live">Open de app</a></p>
+  <form id="login" hidden>
+    <p>Eén keer je wachtwoord invullen, daarna onthoudt deze telefoon het.</p>
+    <input id="ww" type="password" placeholder="Wachtwoord" autocomplete="current-password">
+    <button type="submit">Openen</button>
+  </form>
+  <p><a id="open" href="https://22920fba6a91f0bc1e.gradio.live">Open de app</a></p>
   <p class="klein">Werkt alleen als de app op de pc aanstaat (start.bat).</p>
+  <button class="vergeet" id="vergeet" hidden>Wachtwoord vergeten op deze telefoon</button>
 </div>
 <script>
-  const url = "https://ca77343a1156674aa0.gradio.live";
-  fetch(url, { mode: "no-cors" })
-    .then(() => { location.href = url; })
-    .catch(() => {
-      document.getElementById("status").textContent =
-        "De app staat nu uit. Start start.bat op de pc en ververs deze pagina na een minuut.";
-    });
+  const url = "https://22920fba6a91f0bc1e.gradio.live";
+  const SLEUTEL = "muziekjes_sleutel";
+  const status = document.getElementById("status");
+
+  async function sleutelVan(ww) {  // zelfde berekening als in app.py (_sleutel)
+    const data = new TextEncoder().encode("muziekjes:" + ww.trim());
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function openApp() {
+    const s = localStorage.getItem(SLEUTEL);
+    const doel = s ? url + "/?t=" + s : url;
+    document.getElementById("open").href = doel;
+    fetch(url, { mode: "no-cors" })
+      .then(() => { location.href = doel; })
+      .catch(() => {
+        status.textContent =
+          "De app staat nu uit. Start start.bat op de pc en ververs deze pagina na een minuut.";
+      });
+  }
+
+  document.getElementById("login").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    localStorage.setItem(SLEUTEL, await sleutelVan(document.getElementById("ww").value));
+    openApp();
+  });
+  document.getElementById("vergeet").addEventListener("click", () => {
+    localStorage.removeItem(SLEUTEL);
+    location.reload();
+  });
+
+  if (localStorage.getItem(SLEUTEL)) {
+    document.getElementById("vergeet").hidden = false;
+    openApp();
+  } else {
+    status.textContent = "";
+    document.getElementById("login").hidden = false;
+  }
 </script>
 </body>
 </html>
