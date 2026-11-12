@@ -344,7 +344,15 @@ def _dl(label):
     return gr.DownloadButton(f"⬇️ Download {label}", visible=False, variant="secondary")
 
 
-with gr.Blocks(title="Muziekjes") as app:
+LOGO_URL = "https://wgnghr44bg-coder.github.io/muziekjes/logo/"
+LOGO_HEAD = f"""
+<link rel="apple-touch-icon" href="{LOGO_URL}apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Muziekjes">
+<meta property="og:image" content="{LOGO_URL}deelplaatje.png">
+<meta property="og:description" content="Muziek opnemen & omzetten">
+"""  # eigen logo i.p.v. het Gradio-logo op iPhone-beginscherm en bij delen
+
+with gr.Blocks(title="Muziekjes", head=LOGO_HEAD) as app:
     gr.Markdown("# 🎵 Muziekjes")
     ingelogd = gr.State(False)
     onthouden = gr.BrowserState("", storage_key="muziekjes_sleutel")
