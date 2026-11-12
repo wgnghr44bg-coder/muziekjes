@@ -103,7 +103,7 @@ def video_naar_tekst(url, bestand, pauze_min, alinea_pauze, met_ai, progress=gr.
     import video_tekst as vt
     url = (url or "").strip()
     if not url and not bestand:
-        raise gr.Error("Plak een YouTube-link of upload een video.")
+        raise gr.Error("Plak een YouTube- of TikTok-link, of upload een video.")
     try:
         tekst, meta = vt.video_naar_tekst(
             url or None, bestand, OUT_DIR, pauze_min=float(pauze_min),
@@ -127,11 +127,11 @@ def naar_mp3_keuze(url, pad, progress=gr.Progress()):
     url = (url or "").strip()
     if not url:
         return naar_mp3(pad, progress=progress)
-    progress(0.1, desc="Ophalen van YouTube...")
+    progress(0.1, desc="Video ophalen...")
     try:
         bron, meta = vt.youtube_ophalen(url, OUT_DIR / "tmp")
     except Exception as e:
-        raise gr.Error(f"Kon deze YouTube-link niet ophalen: {str(e)[:200]}")
+        raise gr.Error(f"Kon deze link niet ophalen: {str(e)[:200]}")
     progress(0.6, desc="Omzetten naar mp3...")
     naam = re.sub(r'[\\/:*?"<>|]+', "", meta.get("titel") or "youtube").strip()[:80] or "youtube"
     doel = OUT_DIR / f"{naam}.mp3"
@@ -413,10 +413,10 @@ with gr.Blocks(title="Muziekjes") as app:
             gr.Markdown("*Na het opnemen staat de opname automatisch klaar in stap 1.*")
 
         with gr.Tab("Video → tekst"):
-            gr.Markdown("Plak een YouTube-link (of upload een eigen video). Je krijgt een "
+            gr.Markdown("Plak een YouTube- of TikTok-link (of upload een eigen video). Je krijgt een "
                         "transcript met pauzes, de opbouw van de video en een samenvatting.")
-            yt_link = gr.Textbox(label="YouTube-link",
-                                 placeholder="https://www.youtube.com/watch?v=...")
+            yt_link = gr.Textbox(label="YouTube- of TikTok-link",
+                                 placeholder="https://www.youtube.com/... of https://www.tiktok.com/...")
             with gr.Accordion("Of upload een eigen video / audio", open=False):
                 vt_bestand = gr.File(label="Video of audio",
                                      file_types=["video", "audio", ".mp4", ".mov", ".m4a"],
@@ -433,9 +433,9 @@ with gr.Blocks(title="Muziekjes") as app:
             vt_uit = gr.Textbox(label="Resultaat", lines=20, max_lines=40, buttons=["copy"])
 
         with gr.Tab("Naar MP3"):
-            gr.Markdown("Plak een YouTube-link **of** upload een video, en download het als mp3.")
-            mp3_link = gr.Textbox(label="YouTube-link",
-                                  placeholder="https://www.youtube.com/watch?v=...")
+            gr.Markdown("Plak een YouTube- of TikTok-link **of** upload een video, en download het als mp3.")
+            mp3_link = gr.Textbox(label="YouTube- of TikTok-link",
+                                  placeholder="https://www.youtube.com/... of https://www.tiktok.com/...")
             video = gr.File(label="Of: video uploaden (mp4, mov, ...)",
                             file_types=["video", "audio", ".mp4", ".mov", ".m4v", ".m4a"],
                             type="filepath")

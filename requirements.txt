@@ -6,5 +6,5 @@ soundfile
 noisereduce
 audioread
 soundcard
-yt-dlp
+yt-dlp[default,curl-cffi]
 faster-whisper
