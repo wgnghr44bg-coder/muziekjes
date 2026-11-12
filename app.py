@@ -485,7 +485,8 @@ def publiceer_link(url: str):
 if __name__ == "__main__":
     print(f"\n  Wachtwoord voor de app: {WACHTWOORD}\n")
     _, lokaal, openbaar = app.queue().launch(
-        share=True, inbrowser=True, prevent_thread_lock=True, max_file_size="200mb")
+        share=True, inbrowser=True, prevent_thread_lock=True, max_file_size="200mb",
+        favicon_path=str(Path(__file__).parent / "docs" / "logo" / "favicon-32.png"))
     if openbaar:
         print(f"  Openbare link: {openbaar}")
         publiceer_link(openbaar)
