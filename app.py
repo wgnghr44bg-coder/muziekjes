@@ -97,6 +97,38 @@ def naar_mp3(pad, progress=gr.Progress()):
     return str(doel), str(doel)
 
 
+def pc_opnemen(seconden, progress=gr.Progress()):
+    """Neem op wat de pc op dit moment afspeelt (Windows loopback van de standaard speaker)."""
+    import warnings
+    import soundcard as sc
+    try:  # Gradio draait functies in een aparte thread; Windows-audio heeft daar COM nodig
+        import ctypes
+        ctypes.windll.ole32.CoInitializeEx(None, 0)
+    except Exception:
+        pass
+    warnings.simplefilter("ignore", category=Warning)
+    sr, seconden = 44100, int(seconden)
+    spk = sc.default_speaker()
+    mic = sc.get_microphone(id=str(spk.name), include_loopback=True)
+    stukken = []
+    with mic.recorder(samplerate=sr, channels=2) as rec:
+        for s in range(seconden):
+            progress((s + 1) / seconden, desc=f"Opnemen... {s + 1}/{seconden} sec")
+            stukken.append(rec.record(numframes=sr))
+    data = np.concatenate(stukken)
+    if np.abs(data).max() < 1e-4:
+        raise gr.Error("Er was niets te horen. Speelt er geluid af op de pc (en staat het volume aan)?")
+    p = _stamp("pc-opname")
+    sf.write(p, data, sr)
+    return str(p), str(p)
+
+
+def mic_gebruiken(opname, progress=None):
+    if not opname:
+        raise gr.Error("Neem eerst iets op met de microfoon.")
+    return opname
+
+
 def scheid(bestand, progress=gr.Progress()):
     """Eerste (beste) versie: htdemucs, ongewijzigd opgeslagen."""
     if not bestand:
@@ -262,6 +294,19 @@ with gr.Blocks(title="Muziekjes") as app:
             knop2 = gr.Button("Nieuwe achtergrond maken", variant="primary")
             uit = [gr.Audio(label=f"Versie {i}") for i in (1, 2, 3)]
 
+        with gr.Tab("Opnemen"):
+            gr.Markdown("### 💻 Geluid van de pc\nNeemt op wat de pc nu afspeelt "
+                        "(YouTube, Spotify, ...). Zet eerst het geluid aan op de pc, druk dan op opnemen.")
+            seconden = gr.Slider(5, 300, value=30, step=5, label="Hoe lang opnemen (sec)")
+            knop_pc = gr.Button("⏺ Pc-geluid opnemen", variant="primary")
+            pc_opname = gr.Audio(label="Pc-opname")
+            gr.Markdown("### 📱 Microfoon (telefoon)\nNeemt op via de microfoon, bijvoorbeeld "
+                        "muziek uit je speaker. Tip: met de schermopname van je iPhone krijg je "
+                        "betere kwaliteit; die mp4 kun je in stap 1 uploaden.")
+            mic_opname = gr.Audio(label="Microfoon-opname", sources=["microphone"], type="filepath")
+            knop_mic = gr.Button("Gebruik deze opname in stap 1")
+            gr.Markdown("*Na het opnemen staat de opname automatisch klaar in stap 1.*")
+
         with gr.Tab("MP4 → MP3"):
             gr.Markdown("Zet een video om naar een mp3-bestand.")
             video = gr.File(label="Video (mp4, mov, ...)",
@@ -272,6 +317,8 @@ with gr.Blocks(title="Muziekjes") as app:
             mp3_download = gr.File(label="Download MP3")
 
     knop3.click(alleen_ingelogd(naar_mp3), [ingelogd, video], [mp3_speler, mp3_download])
+    knop_pc.click(alleen_ingelogd(pc_opnemen), [ingelogd, seconden], [pc_opname, inp])
+    knop_mic.click(alleen_ingelogd(mic_gebruiken), [ingelogd, mic_opname], inp)
     login_uit = [ingelogd, login_scherm, hoofd_scherm, login_melding]
     login_knop.click(inloggen, ww_invoer, login_uit)
     ww_invoer.submit(inloggen, ww_invoer, login_uit)
