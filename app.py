@@ -119,6 +119,33 @@ def video_naar_tekst(url, bestand, pauze_min, alinea_pauze, met_ai, progress=gr.
     return tekst, gr.update(value=str(p), visible=True)
 
 
+def naar_mp3_keuze(url, pad, progress=gr.Progress()):
+    """MP3 maken van een YouTube-link of van een geüpload bestand."""
+    import re
+    import subprocess
+    import video_tekst as vt
+    url = (url or "").strip()
+    if not url:
+        return naar_mp3(pad, progress=progress)
+    progress(0.1, desc="Ophalen van YouTube...")
+    try:
+        bron, meta = vt.youtube_ophalen(url, OUT_DIR / "tmp")
+    except Exception as e:
+        raise gr.Error(f"Kon deze YouTube-link niet ophalen: {str(e)[:200]}")
+    progress(0.6, desc="Omzetten naar mp3...")
+    naam = re.sub(r'[\\/:*?"<>|]+', "", meta.get("titel") or "youtube").strip()[:80] or "youtube"
+    doel = OUT_DIR / f"{naam}.mp3"
+    r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", bron, "-vn",
+                        "-c:a", "libmp3lame", "-b:a", "192k",
+                        "-metadata", f"title={meta.get('titel', '')}",
+                        "-metadata", f"artist={meta.get('kanaal', '')}", str(doel)],
+                       capture_output=True, text=True)
+    Path(bron).unlink(missing_ok=True)
+    if r.returncode != 0 or not doel.exists():
+        raise gr.Error("Omzetten naar mp3 is mislukt.")
+    return str(doel), gr.update(value=str(doel), visible=True)
+
+
 def pc_opnemen(seconden, progress=gr.Progress()):
     """Neem op wat de pc op dit moment afspeelt (Windows loopback van de standaard speaker)."""
     import warnings
@@ -405,9 +432,11 @@ with gr.Blocks(title="Muziekjes") as app:
             dl_txt = _dl("tekstbestand (.txt)")
             vt_uit = gr.Textbox(label="Resultaat", lines=20, max_lines=40, buttons=["copy"])
 
-        with gr.Tab("MP4 → MP3"):
-            gr.Markdown("Zet een video om naar een mp3-bestand.")
-            video = gr.File(label="Video (mp4, mov, ...)",
+        with gr.Tab("Naar MP3"):
+            gr.Markdown("Plak een YouTube-link **of** upload een video, en download het als mp3.")
+            mp3_link = gr.Textbox(label="YouTube-link",
+                                  placeholder="https://www.youtube.com/watch?v=...")
+            video = gr.File(label="Of: video uploaden (mp4, mov, ...)",
                             file_types=["video", "audio", ".mp4", ".mov", ".m4v", ".m4a"],
                             type="filepath")
             knop3 = gr.Button("Omzetten naar MP3", variant="primary")
@@ -433,7 +462,8 @@ with gr.Blocks(title="Muziekjes") as app:
     knop_pc.click(alleen_ingelogd(pc_opnemen), [ingelogd, seconden], [pc_opname, inp]).then(
         _download_knoppen, pc_opname, dl_pc)
     knop_mic.click(alleen_ingelogd(mic_gebruiken), [ingelogd, mic_opname], inp)
-    knop3.click(alleen_ingelogd(naar_mp3), [ingelogd, video], [mp3_speler, dl_mp3])
+    knop3.click(alleen_ingelogd(naar_mp3_keuze), [ingelogd, mp3_link, video],
+                [mp3_speler, dl_mp3])
     knop_vt.click(alleen_ingelogd(video_naar_tekst),
                   [ingelogd, yt_link, vt_bestand, pauze_min, alinea_pauze, met_ai],
                   [vt_uit, dl_txt])
