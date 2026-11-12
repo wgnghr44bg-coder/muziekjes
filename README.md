@@ -1,4 +1,4 @@
-﻿# ðŸŽµ Muziekjes
+# 🎵 Muziekjes
 
 Lokale web-app (Gradio) om achtergrondmuziek uit een nummer of video te halen en na te maken.
 Draait op een eigen pc met NVIDIA-videokaart en is via een openbare link ook op de telefoon te gebruiken.
@@ -7,11 +7,11 @@ Draait op een eigen pc met NVIDIA-videokaart en is via een openbare link ook op 
 
 | Tabblad | Wat het doet |
 |---|---|
-| **1. Achtergrond eruit halen** | Haalt zang/stem weg met Demucs (`htdemucs`). Geeft de achtergrond plus losse sporen (drums, bas, overig, zang). Accepteert audio Ã©n video (mp4, mov, ...). |
+| **1. Achtergrond eruit halen** | Haalt zang/stem weg met Demucs (`htdemucs`). Geeft de achtergrond plus losse sporen (drums, bas, overig, zang). Accepteert audio én video (mp4, mov, ...). |
 | **2. Nieuwe achtergrond maken** | MusicGen-Melody maakt nieuwe muziek (max. 30 sec) die de melodie en stijl van een voorbeeld volgt. |
 | **Opnemen** | Neemt het geluid op dat de pc afspeelt (Windows loopback), of via de microfoon van de telefoon. |
-| **Video â†’ tekst** | YouTube-link of eigen video â†’ transcript (faster-whisper `large-v3-turbo`) met pauzes en alinea's, opbouw + samenvatting (lokaal via Ollama `qwen3:14b`), export als .txt. Code in `video_tekst.py`. |
-| **MP4 â†’ MP3** | Zet een video om naar mp3 (192 kbps). |
+| **Video → tekst** | YouTube-link of eigen video → transcript (faster-whisper `large-v3-turbo`) met pauzes en alinea's, opbouw + samenvatting (lokaal via Ollama `qwen3:14b`), export als .txt. Code in `video_tekst.py`. |
+| **Naar MP3** | YouTube-link of video → mp3 (192 kbps, met titel) om te downloaden. |
 
 ## Starten
 
@@ -30,7 +30,7 @@ het vaste adres door naar de app. De link werkt alleen zolang de app op de pc dr
 
 - `app.py`: de hele app (verwerking + interface + login + link publiceren)
 - `start.bat`: installeren en starten
-- `requirements.txt`: Python-pakketten (PyTorch wordt apart geÃ¯nstalleerd met CUDA 12.6)
+- `requirements.txt`: Python-pakketten (PyTorch wordt apart geïnstalleerd met CUDA 12.6)
 - `docs/sjabloon.html`: doorstuurpagina, `{{URL}}` wordt vervangen door de actuele link
 - `uitvoer/`: resultaten (niet op GitHub)
 
