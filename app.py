@@ -97,6 +97,28 @@ def naar_mp3(pad, progress=gr.Progress()):
     return str(doel), gr.update(value=str(doel), visible=True)
 
 
+def video_naar_tekst(url, bestand, pauze_min, alinea_pauze, met_ai, progress=gr.Progress()):
+    """YouTube-link of eigen video -> transcript met pauzes, opbouw en samenvatting (.txt)."""
+    import re
+    import video_tekst as vt
+    url = (url or "").strip()
+    if not url and not bestand:
+        raise gr.Error("Plak een YouTube-link of upload een video.")
+    try:
+        tekst, meta = vt.video_naar_tekst(
+            url or None, bestand, OUT_DIR, pauze_min=float(pauze_min),
+            alinea_pauze=float(alinea_pauze), met_ai=bool(met_ai),
+            voortgang=lambda f, d: progress(f, desc=d))
+    except gr.Error:
+        raise
+    except Exception as e:
+        raise gr.Error(f"Dat lukte niet: {str(e)[:300]}")
+    naam = re.sub(r"[^\w\- ]+", "", meta.get("titel") or "video").strip()[:60] or "video"
+    p = OUT_DIR / f"{time.strftime('%Y%m%d-%H%M%S')}_{naam}.txt"
+    p.write_text(tekst, encoding="utf-8-sig")  # BOM: opent goed in Kladblok en op iPhone
+    return tekst, gr.update(value=str(p), visible=True)
+
+
 def pc_opnemen(seconden, progress=gr.Progress()):
     """Neem op wat de pc op dit moment afspeelt (Windows loopback van de standaard speaker)."""
     import warnings
@@ -363,6 +385,26 @@ with gr.Blocks(title="Muziekjes") as app:
             knop_mic = gr.Button("Gebruik deze opname in stap 1")
             gr.Markdown("*Na het opnemen staat de opname automatisch klaar in stap 1.*")
 
+        with gr.Tab("Video → tekst"):
+            gr.Markdown("Plak een YouTube-link (of upload een eigen video). Je krijgt een "
+                        "transcript met pauzes, de opbouw van de video en een samenvatting.")
+            yt_link = gr.Textbox(label="YouTube-link",
+                                 placeholder="https://www.youtube.com/watch?v=...")
+            with gr.Accordion("Of upload een eigen video / audio", open=False):
+                vt_bestand = gr.File(label="Video of audio",
+                                     file_types=["video", "audio", ".mp4", ".mov", ".m4a"],
+                                     type="filepath")
+            with gr.Accordion("Instellingen", open=False):
+                pauze_min = gr.Slider(0.5, 3, value=1.0, step=0.1,
+                                      label="Pauze aangeven vanaf (sec)")
+                alinea_pauze = gr.Slider(1, 6, value=2.5, step=0.5,
+                                         label="Nieuwe alinea bij pauze vanaf (sec)")
+                met_ai = gr.Checkbox(value=True, label="Opbouw en samenvatting met AI "
+                                     "(langzamer, Ollama moet op de pc draaien)")
+            knop_vt = gr.Button("📝 Maak tekst", variant="primary")
+            dl_txt = _dl("tekstbestand (.txt)")
+            vt_uit = gr.Textbox(label="Resultaat", lines=20, max_lines=40, buttons=["copy"])
+
         with gr.Tab("MP4 → MP3"):
             gr.Markdown("Zet een video om naar een mp3-bestand.")
             video = gr.File(label="Video (mp4, mov, ...)",
@@ -392,6 +434,9 @@ with gr.Blocks(title="Muziekjes") as app:
         _download_knoppen, pc_opname, dl_pc)
     knop_mic.click(alleen_ingelogd(mic_gebruiken), [ingelogd, mic_opname], inp)
     knop3.click(alleen_ingelogd(naar_mp3), [ingelogd, video], [mp3_speler, dl_mp3])
+    knop_vt.click(alleen_ingelogd(video_naar_tekst),
+                  [ingelogd, yt_link, vt_bestand, pauze_min, alinea_pauze, met_ai],
+                  [vt_uit, dl_txt])
 
 
 def publiceer_link(url: str):

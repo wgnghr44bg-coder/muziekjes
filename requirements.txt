@@ -6,3 +6,5 @@ soundfile
 noisereduce
 audioread
 soundcard
+yt-dlp
+faster-whisper

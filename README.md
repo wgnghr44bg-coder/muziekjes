@@ -9,6 +9,8 @@ Draait op een eigen pc met NVIDIA-videokaart en is via een openbare link ook op 
 |---|---|
 | **1. Achtergrond eruit halen** | Haalt zang/stem weg met Demucs (`htdemucs`). Geeft de achtergrond plus losse sporen (drums, bas, overig, zang). Accepteert audio én video (mp4, mov, ...). |
 | **2. Nieuwe achtergrond maken** | MusicGen-Melody maakt nieuwe muziek (max. 30 sec) die de melodie en stijl van een voorbeeld volgt. |
+| **Opnemen** | Neemt het geluid op dat de pc afspeelt (Windows loopback), of via de microfoon van de telefoon. |
+| **Video → tekst** | YouTube-link of eigen video → transcript (faster-whisper `large-v3-turbo`) met pauzes en alinea's, opbouw + samenvatting (lokaal via Ollama `qwen3:14b`), export als .txt. Code in `video_tekst.py`. |
 | **MP4 → MP3** | Zet een video om naar mp3 (192 kbps). |
 
 ## Starten
